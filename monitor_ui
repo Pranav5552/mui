@@ -1,0 +1,884 @@
+!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rover Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#12100d; --panel:#1c1811; --panel-2:#221d14; --line:#332c1d;
+    --accent:#ffb020; --accent-dim:#8a641c; --text:#f2ede4; --text-dim:#948c7a;
+    --ok:#3ecf8e; --warn:#ffb020; --danger:#ff6a4d; --radius:3px;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: radial-gradient(120% 140% at 50% -10%, #1a160f 0%, var(--bg) 55%);
+    color:var(--text); font-family:'Space Grotesk',-apple-system,sans-serif;
+    min-height:100vh; padding:18px 14px 60px;
+  }
+  .frame{ max-width:1180px; margin:0 auto; }
+  .topbar{ display:flex; align-items:baseline; justify-content:space-between; padding-bottom:14px; margin-bottom:16px; border-bottom:1px solid var(--line); flex-wrap:wrap; gap:8px; }
+  .topbar h1{ font-size:1.3rem; font-weight:600; margin:0; }
+  .topbar p{ margin:2px 0 0; color:var(--text-dim); font-size:0.82rem; }
+  .topbar a{ color:var(--accent); font-size:0.82rem; text-decoration:none; border:1px solid var(--accent-dim); padding:6px 12px; border-radius:16px; }
+  .topbar a:hover{ background:rgba(255,176,32,0.08); }
+ 
+  .verdict-row{ display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+  .verdict{ display:flex; align-items:center; gap:12px; padding:14px 16px; border-radius:var(--radius); border:1px solid var(--line); flex:1 1 260px; }
+  .verdict.safe{ background:rgba(62,207,142,0.08); border-color:rgba(62,207,142,0.3); }
+  .verdict.caution{ background:rgba(255,176,32,0.08); border-color:rgba(255,176,32,0.3); }
+  .verdict.unsafe{ background:rgba(255,106,77,0.1); border-color:rgba(255,106,77,0.35); }
+  .verdict .dot{ width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+  .verdict.safe .dot{ background:var(--ok); }
+  .verdict.caution .dot{ background:var(--warn); }
+  .verdict.unsafe .dot{ background:var(--danger); }
+  .verdict .kicker{ font-size:0.68rem; color:var(--text-dim); margin-bottom:1px; }
+  .verdict .title{ font-weight:600; font-size:1rem; }
+  .verdict .reasons{ color:var(--text-dim); font-size:0.8rem; margin-top:2px; }
+ 
+  .health-table{ width:100%; border-collapse:collapse; font-size:0.82rem; margin-bottom:10px; }
+  .health-table th{ text-align:left; color:var(--text-dim); font-weight:500; font-size:0.7rem; padding:6px 8px; border-bottom:1px solid var(--line); }
+  .health-table td{ padding:7px 8px; border-bottom:1px solid var(--line); }
+  .health-table tr:last-child td{ border-bottom:none; }
+  .health-table .state-on{ color:var(--ok); }
+  .health-table .state-off{ color:var(--danger); font-weight:600; }
+  .health-table .wrong-yes{ color:var(--warn); font-weight:600; }
+  .health-table .wrong-no, .health-table .wrong-na{ color:var(--text-dim); }
+  .health-conclusion{ font-size:0.85rem; padding:10px 12px; border-radius:var(--radius); background:var(--panel-2); border:1px solid var(--line); }
+  .health-conclusion.warn{ border-color:rgba(255,176,32,0.4); color:var(--warn); }
+  .health-conclusion.critical{ border-color:rgba(255,106,77,0.4); color:var(--danger); }
+ 
+  .temp-row{ align-items:center; }
+  .temp-side{ display:flex; align-items:center; gap:8px; }
+  #tempSparkline{ border:1px solid var(--line); border-radius:2px; background:var(--panel-2); }
+  .temp-alert-banner{ font-size:0.78rem; padding:7px 10px; border-radius:var(--radius); margin:2px 0 8px; }
+  .temp-alert-banner.ok{ color:var(--text-dim); background:var(--panel-2); }
+  .temp-alert-banner.danger{ color:var(--danger); background:rgba(255,106,77,0.12); border:1px solid rgba(255,106,77,0.35); font-weight:600; animation:pulse 1.4s ease-in-out infinite; }
+  @media (prefers-reduced-motion:reduce){ .temp-alert-banner.danger{ animation:none; } }
+ 
+  .path-caveat{ font-size:0.78rem; color:var(--text-dim); margin:0 0 12px; }
+  .path-layout{ display:flex; gap:16px; flex-wrap:wrap; }
+  #pathMap{ background:#050403; border:1px solid var(--line); border-radius:var(--radius); flex:0 0 auto; max-width:100%; }
+  .path-side{ flex:1 1 220px; min-width:200px; display:flex; flex-direction:column; gap:10px; }
+  .path-readout{ font-family:'IBM Plex Mono',monospace; font-size:0.82rem; background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; }
+  .path-controls{ display:flex; gap:8px; flex-wrap:wrap; }
+  .path-controls select{ flex:1; background:var(--bg); border:1px solid var(--line); color:var(--text); font-family:'IBM Plex Mono',monospace; font-size:0.8rem; padding:7px; border-radius:var(--radius); }
+  .path-cloud summary{ font-size:0.8rem; color:var(--text-dim); cursor:pointer; }
+  .path-cloud input[type=text]{ margin-bottom:8px; }
+ 
+  .columns{ display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start; }
+  .col-cam{ flex:1 1 420px; min-width:300px; }
+  .col-sensors{ flex:1 1 420px; min-width:300px; }
+ 
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:14px; }
+  .section-label{ font-size:0.8rem; color:var(--text-dim); margin:0 0 10px; }
+  .label{ font-size:0.76rem; color:var(--text-dim); margin-bottom:6px; display:block; }
+  .field-row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .field-row > div{ flex:1 1 180px; }
+  input[type=text]{ width:100%; background:var(--bg); border:1px solid var(--line); color:var(--text); font-family:'IBM Plex Mono',monospace; font-size:0.88rem; padding:8px 10px; border-radius:var(--radius); margin-bottom:10px; }
+  button{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:0.85rem; background:var(--accent); color:#1a1206; border:none; border-radius:var(--radius); padding:8px 16px; cursor:pointer; }
+  button:hover{ background:#ffc457; }
+  button.ghost{ background:transparent; color:var(--accent); border:1px solid var(--accent-dim); font-weight:500; }
+  button:disabled{ opacity:0.4; cursor:default; }
+  input:focus-visible, button:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+  .connect-msg{ font-size:0.78rem; color:var(--danger); min-height:1.1em; margin-top:2px; }
+  .collapsed-bar{ display:flex; align-items:center; justify-content:space-between; font-family:'IBM Plex Mono',monospace; font-size:0.76rem; color:var(--text-dim); margin-bottom:10px; flex-wrap:wrap; gap:6px; }
+  .collapsed-bar b{ color:var(--text); font-weight:500; }
+ 
+  /* viewfinder */
+  .viewfinder{ position:relative; width:100%; aspect-ratio:4/3; background:#050403; border-radius:var(--radius); overflow:hidden; margin-bottom:10px; }
+  .viewfinder img{ position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
+  .brackets span{ position:absolute; width:24px; height:24px; border:3px solid var(--accent); opacity:0.85; z-index:3; }
+  .brackets .tl{ top:8px; left:8px; border-right:none; border-bottom:none; }
+  .brackets .tr{ top:8px; right:8px; border-left:none; border-bottom:none; }
+  .brackets .bl{ bottom:8px; left:8px; border-right:none; border-top:none; }
+  .brackets .br{ bottom:8px; right:8px; border-left:none; border-top:none; }
+  .signal-pill{ position:absolute; top:12px; left:40px; z-index:4; display:flex; align-items:center; gap:6px; background:rgba(18,16,13,0.75); border:1px solid var(--line); padding:4px 10px 4px 8px; border-radius:20px; font-family:'IBM Plex Mono',monospace; font-size:0.72rem; }
+  .signal-dot{ width:7px; height:7px; border-radius:50%; background:var(--danger); }
+  .signal-pill.live .signal-dot{ background:var(--ok); animation:pulse 1.6s ease-in-out infinite; }
+  .signal-pill.live{ color:var(--ok); } .signal-pill.down{ color:var(--danger); }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+  @media (prefers-reduced-motion:reduce){ .signal-pill.live .signal-dot{ animation:none; } }
+  .flash-overlay{ position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:5; }
+  .flash-overlay.go{ opacity:0.85; transition:opacity 0.4s ease; }
+  .no-signal{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:6px; text-align:center; padding:20px; z-index:2; color:var(--text-dim); font-size:0.85rem; }
+ 
+  .cam-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:6px; }
+  .capture-msg{ font-size:0.78rem; color:var(--ok); min-height:1.1em; }
+ 
+  .settings-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; margin-top:10px; }
+  .settings-grid .full{ grid-column:1 / -1; }
+  .settings-grid label{ font-size:0.75rem; color:var(--text-dim); display:block; margin-bottom:3px; }
+  input[type=range]{ width:100%; accent-color:var(--accent); }
+  select{ width:100%; background:var(--bg); border:1px solid var(--line); color:var(--text); font-family:'IBM Plex Mono',monospace; font-size:0.82rem; padding:6px; border-radius:var(--radius); }
+  .toggle-row{ display:flex; align-items:center; gap:8px; font-size:0.78rem; color:var(--text-dim); }
+  .fps-note{ font-size:0.72rem; color:var(--text-dim); grid-column:1/-1; margin-top:2px; }
+ 
+  /* alerts / gauges (sensor groups) */
+  .alert-row{ display:flex; align-items:center; gap:10px; padding:7px 0; }
+  .alert-row + .alert-row{ border-top:1px solid var(--line); }
+  .alert-dot{ width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+  .alert-dot.ok{ background:var(--ok); } .alert-dot.warn{ background:var(--warn); }
+  .alert-dot.danger{ background:var(--danger); animation:pulse 1.4s ease-in-out infinite; }
+  @media (prefers-reduced-motion:reduce){ .alert-dot.danger{ animation:none; } }
+  .alert-label{ font-size:0.82rem; color:var(--text-dim); width:82px; flex-shrink:0; }
+  .alert-value{ font-size:0.85rem; flex:1; }
+  .alert-raw{ font-family:'IBM Plex Mono',monospace; font-size:0.7rem; color:var(--text-dim); }
+  .gauge{ display:flex; gap:3px; margin:5px 0 2px 92px; }
+  .gauge-seg{ height:5px; flex:1; background:var(--line); border-radius:2px; }
+  .gauge-seg.on-ok{ background:var(--ok); } .gauge-seg.on-warn{ background:var(--warn); } .gauge-seg.on-danger{ background:var(--danger); }
+ 
+  .rows{ display:flex; flex-direction:column; }
+  .row{ display:flex; justify-content:space-between; padding:7px 0; font-size:0.85rem; gap:8px; }
+  .row + .row{ border-top:1px solid var(--line); }
+  .row .k{ color:var(--text-dim); }
+  .row .v{ font-family:'IBM Plex Mono',monospace; text-align:right; }
+ 
+  .motion-row{ display:flex; gap:16px; flex-wrap:wrap; justify-content:center; margin-bottom:8px; }
+  .instrument{ display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .instrument .cap{ font-size:0.7rem; color:var(--text-dim); }
+  .instrument .num{ font-family:'IBM Plex Mono',monospace; font-size:0.8rem; }
+  .attitude{ width:110px; height:110px; border-radius:50%; overflow:hidden; position:relative; border:2px solid var(--line); background:#050403; }
+  .horizon{ position:absolute; width:300%; height:300%; left:-100%; top:-100%; transition:transform 0.2s ease-out; }
+  .horizon .sky{ position:absolute; top:0; left:0; right:0; height:50%; background:linear-gradient(to bottom,#46392090,#2a241690); }
+  .horizon .ground{ position:absolute; bottom:0; left:0; right:0; height:50%; background:linear-gradient(to top,#0a0805,#1a160f); border-top:2px solid var(--accent); }
+  .ai-fixed{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:6px; pointer-events:none; }
+  .ai-wing{ width:26px; height:2px; background:var(--accent); } .ai-dot{ width:5px; height:5px; border-radius:50%; background:var(--accent); }
+  .compass{ width:110px; height:110px; }
+ 
+  .odometer{ display:flex; gap:3px; justify-content:center; margin:6px 0; }
+  .odo-digit{ font-family:'IBM Plex Mono',monospace; font-size:1.3rem; font-weight:500; background:var(--panel-2); border:1px solid var(--line); border-radius:2px; width:26px; height:38px; display:flex; align-items:center; justify-content:center; color:var(--accent); }
+  .odo-digit.sym{ background:transparent; border:none; color:var(--text-dim); width:14px; }
+  .odo-unit{ text-align:center; color:var(--text-dim); font-size:0.74rem; margin-top:2px; }
+ 
+  .climate-compare{ margin-top:10px; }
+  .climate-result{ font-size:0.84rem; margin-top:8px; padding:10px; background:var(--panel-2); border-radius:var(--radius); border:1px solid var(--line); }
+</style>
+</head>
+<body>
+<div class="frame">
+  <header class="topbar">
+    <div><h1>Rover Monitor</h1><p>Camera and sensors, side by side</p></div>
+    <a id="driveLink" href="/drive">Open drive control &rarr;</a>
+  </header>
+ 
+  <div class="verdict-row">
+    <div class="verdict safe" id="verdict">
+      <div class="dot"></div>
+      <div><div class="kicker">Environment</div><div class="title" id="verdictTitle">Waiting for data…</div><div class="reasons" id="verdictReasons"></div></div>
+    </div>
+    <div class="verdict safe" id="sysVerdict">
+      <div class="dot"></div>
+      <div><div class="kicker">Rover system health</div><div class="title" id="sysVerdictTitle">Waiting for data…</div><div class="reasons" id="sysVerdictReasons"></div></div>
+    </div>
+  </div>
+ 
+  <div class="columns">
+    <!-- ===================== CAMERA COLUMN ===================== -->
+    <div class="col-cam">
+      <section class="panel">
+        <div id="connectPanel">
+          <div class="field-row">
+            <div>
+              <label class="label" for="camHost">Camera address</label>
+              <input type="text" id="camHost" placeholder="e.g. 192.168.4.50">
+            </div>
+            <div>
+              <label class="label" for="roverHostInput">Receiver address</label>
+              <input type="text" id="roverHostInput" placeholder="e.g. 192.168.4.1">
+            </div>
+          </div>
+          <button id="connectBtn">Connect</button>
+          <div class="connect-msg" id="connectMsg"></div>
+        </div>
+        <div class="collapsed-bar" id="collapsedBar" hidden>
+          <span>Camera: <b id="collapsedCamHost"></b> · Receiver: <b id="collapsedRoverHost"></b></span>
+          <button class="ghost" id="editBtn">Edit</button>
+        </div>
+ 
+        <div class="viewfinder" id="viewfinder">
+          <div class="brackets"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+          <div class="signal-pill down" id="signalPill"><span class="signal-dot"></span><span id="signalText">No signal</span></div>
+          <img id="streamImg" alt="Live camera feed">
+          <div class="flash-overlay" id="flashOverlay"></div>
+          <div class="no-signal" id="noSignalMsg"><strong>No camera connected</strong><span>Enter the camera address and hit Connect.</span></div>
+        </div>
+ 
+        <div class="cam-actions">
+          <button id="captureBtn">Capture photo</button>
+          <button class="ghost" id="settingsToggleBtn">Camera settings</button>
+        </div>
+        <div class="capture-msg" id="captureMsg"></div>
+ 
+        <div id="settingsPanel" hidden>
+          <div class="settings-grid">
+            <div class="full"><label>Resolution</label>
+              <select id="setFramesize">
+                <option value="5">QVGA (320x240) — fastest</option>
+                <option value="8" selected>VGA (640x480)</option>
+                <option value="9">SVGA (800x600)</option>
+                <option value="10">XGA (1024x768)</option>
+                <option value="13">UXGA (1600x1200) — slowest</option>
+              </select>
+            </div>
+            <div><label>Quality (lower = sharper) <span id="qualityVal">12</span></label><input type="range" id="setQuality" min="4" max="40" value="12"></div>
+            <div><label>Brightness <span id="brightnessVal">0</span></label><input type="range" id="setBrightness" min="-2" max="2" value="0"></div>
+            <div><label>Contrast <span id="contrastVal">0</span></label><input type="range" id="setContrast" min="-2" max="2" value="0"></div>
+            <div><label>Saturation <span id="saturationVal">0</span></label><input type="range" id="setSaturation" min="-2" max="2" value="0"></div>
+            <div class="full toggle-row"><input type="checkbox" id="setAec" checked><label for="setAec" style="margin:0;">Auto exposure</label></div>
+            <div id="aecValueRow" hidden><label>Manual exposure <span id="aecValueVal">300</span></label><input type="range" id="setAecValue" min="0" max="1200" value="300"></div>
+            <div class="full toggle-row"><input type="checkbox" id="setAgc" checked><label for="setAgc" style="margin:0;">Auto gain</label></div>
+            <div id="agcGainRow" hidden><label>Manual gain <span id="agcGainVal">5</span></label><input type="range" id="setAgcGain" min="0" max="30" value="5"></div>
+            <div class="fps-note">There's no separate frame-rate control on this camera sensor — frame rate falls out of resolution and quality. Lower either one for a faster stream.</div>
+            <div class="full"><button id="applySettingsBtn">Apply</button></div>
+          </div>
+        </div>
+      </section>
+    </div>
+ 
+    <!-- ===================== SENSORS COLUMN ===================== -->
+    <div class="col-sensors">
+      <section class="panel">
+        <div class="row"><span class="k">Link to rover</span><span class="v" id="linkVal">—</span></div>
+        <div class="row"><span class="k">Command link</span><span class="v" id="cmdLinkVal">—</span></div>
+      </section>
+ 
+      <section class="panel">
+        <p class="section-label">Air &amp; environment</p>
+        <div class="alert-row"><span class="alert-dot ok" id="gasDot"></span><span class="alert-label">Gas</span><span class="alert-value" id="gasText">—</span><span class="alert-raw" id="gasRaw">—</span></div>
+        <div class="gauge" id="gasGauge"><div class="gauge-seg"></div><div class="gauge-seg"></div><div class="gauge-seg"></div></div>
+        <div class="alert-row"><span class="alert-dot ok" id="airDot"></span><span class="alert-label">Air quality</span><span class="alert-value" id="airText">—</span><span class="alert-raw" id="airRaw">—</span></div>
+        <div class="gauge" id="airGauge"><div class="gauge-seg"></div><div class="gauge-seg"></div><div class="gauge-seg"></div><div class="gauge-seg"></div></div>
+        <div class="row temp-row">
+          <span class="k">Temperature</span>
+          <span class="temp-side"><span class="v" id="tempVal">—</span><canvas id="tempSparkline" width="90" height="28"></canvas></span>
+        </div>
+        <div class="temp-alert-banner ok" id="tempAlertBanner">Waiting for data…</div>
+        <div class="row"><span class="k">Humidity</span><span class="v" id="humidityVal">—</span></div>
+ 
+        <div class="climate-compare">
+          <button class="ghost" id="climateBtn">Compare to surface climate</button>
+          <div class="climate-result" id="climateResult" hidden></div>
+        </div>
+      </section>
+ 
+      <section class="panel">
+        <p class="section-label">Motion &amp; navigation</p>
+        <div class="motion-row">
+          <div class="instrument">
+            <div class="attitude"><div class="horizon" id="horizon"><div class="sky"></div><div class="ground"></div></div><div class="ai-fixed"><div class="ai-wing"></div><div class="ai-dot"></div><div class="ai-wing"></div></div></div>
+            <span class="cap">Pitch / roll</span><span class="num" id="pitchRollNum">— / —</span>
+          </div>
+          <div class="instrument">
+            <svg class="compass" id="compass" viewBox="0 0 110 110"></svg>
+            <span class="cap">Rotation from start</span><span class="num" id="yawNum">—</span>
+          </div>
+        </div>
+        <div class="row"><span class="k">Surface</span><span class="v" id="surfaceVal">—</span></div>
+        <div class="row"><span class="k">Obstacle position</span><span class="v" id="obstacleVal">—</span></div>
+        <div class="row"><span class="k">Collision</span><span class="v" id="collisionVal">—</span></div>
+        <div class="row"><span class="k">Upside down</span><span class="v" id="flipVal">—</span></div>
+        <p class="section-label" style="margin-top:12px;">Distance covered</p>
+        <div class="odometer" id="odometer"></div>
+        <div class="odo-unit">meters (from motor run-time)</div>
+      </section>
+ 
+      <section class="panel">
+        <p class="section-label">Rover health</p>
+        <table class="health-table" id="healthTable">
+          <thead><tr><th>Sensor</th><th>State</th><th>Giving wrong readings</th></tr></thead>
+          <tbody id="healthTableBody"></tbody>
+        </table>
+        <div class="health-conclusion" id="healthConclusion">Waiting for data…</div>
+      </section>
+    </div>
+  </div>
+ 
+  <section class="panel">
+    <p class="section-label">Path &amp; return journey</p>
+    <p class="path-caveat">Estimated from heading + motor run-time only - not a real map of the tunnel, and it drifts over distance. Use it as a guide, not a precise track.</p>
+    <div class="path-layout">
+      <canvas id="pathMap" width="360" height="360"></canvas>
+      <div class="path-side">
+        <div class="path-readout" id="pathReadout">Waiting for data…</div>
+        <div class="path-controls">
+          <button class="ghost" id="pathSaveBtn">Save this path</button>
+          <button class="ghost" id="pathClearBtn">Clear live trail</button>
+        </div>
+        <div class="path-controls">
+          <select id="pathSavedSelect"><option value="">Saved paths…</option></select>
+          <button class="ghost" id="pathLoadBtn">Show as reference</button>
+          <button class="ghost" id="pathDeleteBtn">Delete</button>
+        </div>
+        <div class="connect-msg" id="pathMsg"></div>
+        <details class="path-cloud">
+          <summary>Cloud sync (optional)</summary>
+          <p style="color:var(--text-dim); font-size:0.78rem; margin:8px 0;">
+            Off by default - paths save to this browser only (survives reloads, not other devices).
+            To sync anywhere else, create a free Firebase Realtime Database and paste its URL below
+            (e.g. <code>https://YOUR-PROJECT.firebaseio.com</code>).
+          </p>
+          <input type="text" id="cloudDbUrl" placeholder="https://YOUR-PROJECT.firebaseio.com">
+          <button class="ghost" id="cloudSaveUrlBtn">Save address</button>
+          <div class="connect-msg" id="cloudMsg"></div>
+        </details>
+      </div>
+    </div>
+  </section>
+ 
+  <p style="color:var(--text-dim); font-size:0.76rem;">Open this page over a plain address (not https) so it can reach devices on your local network without the browser blocking it as mixed content.</p>
+</div>
+ 
+<script>
+(function(){
+  const q = new URLSearchParams(location.search);
+  const KEY = q.get('key') || '';
+  let camHost = '';
+  let roverHost = '';
+  const els = {};
+  ['camHost','roverHostInput','connectBtn','connectMsg','connectPanel','collapsedBar','collapsedCamHost','collapsedRoverHost','editBtn',
+   'streamImg','signalPill','signalText','noSignalMsg','flashOverlay','captureBtn','captureMsg',
+   'settingsToggleBtn','settingsPanel','setFramesize','setQuality','setBrightness','setContrast','setSaturation',
+   'setAec','aecValueRow','setAecValue','setAgc','agcGainRow','setAgcGain','applySettingsBtn',
+   'qualityVal','brightnessVal','contrastVal','saturationVal','aecValueVal','agcGainVal',
+   'linkVal','cmdLinkVal','gasDot','gasText','gasRaw','gasGauge','airDot','airText','airRaw','airGauge',
+   'tempVal','humidityVal','climateBtn','climateResult','tempSparkline','tempAlertBanner',
+   'horizon','compass','pitchRollNum','yawNum','surfaceVal','obstacleVal','collisionVal','flipVal','odometer',
+   'healthTableBody','healthConclusion','verdict','verdictTitle','verdictReasons',
+   'sysVerdict','sysVerdictTitle','sysVerdictReasons','driveLink',
+   'pathMap','pathReadout','pathSaveBtn','pathClearBtn','pathSavedSelect','pathLoadBtn','pathDeleteBtn','pathMsg',
+   'cloudDbUrl','cloudSaveUrlBtn','cloudMsg'
+  ].forEach(id => els[id]=document.getElementById(id));
+  els.driveLink.href = '/drive?key=' + encodeURIComponent(KEY);
+ 
+  function getCSS(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+  function normalizeHost(v){
+    v = v.trim();
+    if (!v) return '';
+    if (!/^https?:\/\//i.test(v)) v = 'http://' + v;
+    return v.replace(/\/$/, '');
+  }
+  function withKey(url){ return url + (url.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(KEY); }
+  function roverFetch(path, opts){ return fetch(withKey(roverHost + path), opts); }
+  function camFetch(path, opts){ return fetch(withKey(camHost + path), opts); }
+ 
+  // ============================================================
+  // CONNECT (camera + receiver, one form, two addresses)
+  // ============================================================
+  let connected = false;
+  let camStatusTimer = null, telemetryTimer = null;
+ 
+  function setSignal(live){
+    els.signalPill.classList.toggle('live', live);
+    els.signalPill.classList.toggle('down', !live);
+    els.signalText.textContent = live ? 'Live' : 'No signal';
+    els.noSignalMsg.hidden = live;
+  }
+ 
+  function pollCamStatus(){
+    camFetch('/status').then(r => { if (!r.ok) throw 0; return r.json(); }).then(() => setSignal(true))
+      .catch(() => setSignal(false));
+  }
+ 
+  function connect(){
+    const rawCam = els.camHost.value;
+    const rawRover = els.roverHostInput.value;
+    camHost = normalizeHost(rawCam);
+    roverHost = normalizeHost(rawRover);
+    if (!camHost && !roverHost){
+      els.connectMsg.textContent = 'Enter at least one address.';
+      return;
+    }
+    els.connectMsg.textContent = '';
+ 
+    if (camHost){
+      els.streamImg.src = withKey(camHost + '/stream');
+      if (camStatusTimer) clearInterval(camStatusTimer);
+      pollCamStatus();
+      camStatusTimer = setInterval(pollCamStatus, 1000);
+    }
+    if (roverHost){
+      if (telemetryTimer) clearInterval(telemetryTimer);
+      pollTelemetry();
+      telemetryTimer = setInterval(pollTelemetry, 700);
+    }
+ 
+    const params = new URLSearchParams(location.search);
+    if (rawCam.trim()) params.set('cam', rawCam.trim());
+    if (rawRover.trim()) params.set('receiver', rawRover.trim());
+    history.replaceState(null, '', '?' + params.toString());
+ 
+    connected = true;
+    els.collapsedCamHost.textContent = rawCam.trim() || '(not set)';
+    els.collapsedRoverHost.textContent = rawRover.trim() || '(not set)';
+    els.connectPanel.hidden = true;
+    els.collapsedBar.hidden = false;
+  }
+  els.connectBtn.addEventListener('click', connect);
+  els.editBtn.addEventListener('click', () => {
+    els.connectPanel.hidden = false; els.collapsedBar.hidden = true; connected = false;
+  });
+  els.streamImg.addEventListener('error', () => setSignal(false));
+ 
+  // ---- capture photo ----
+  els.captureBtn.addEventListener('click', () => {
+    if (!camHost){ els.captureMsg.textContent = 'Connect to a camera first.'; els.captureMsg.style.color = getCSS('--danger'); return; }
+    els.flashOverlay.classList.add('go');
+    setTimeout(()=>els.flashOverlay.classList.remove('go'), 120);
+    camFetch('/capture').then(r=>r.json()).then(data => {
+      els.captureMsg.style.color = data.success ? getCSS('--ok') : getCSS('--danger');
+      els.captureMsg.textContent = data.success ? ('Saved ' + data.filename) : ('Could not save: ' + (data.error||'unknown error'));
+    }).catch(() => { els.captureMsg.style.color = getCSS('--danger'); els.captureMsg.textContent = "Couldn't reach the camera."; });
+  });
+ 
+  // ---- camera settings ----
+  els.settingsToggleBtn.addEventListener('click', () => {
+    const opening = els.settingsPanel.hidden;
+    els.settingsPanel.hidden = !opening;
+    if (opening && camHost){
+      camFetch('/settings').then(r=>r.json()).then(s => {
+        els.setFramesize.value = s.framesize;
+        els.setQuality.value = s.quality; els.qualityVal.textContent = s.quality;
+        els.setBrightness.value = s.brightness; els.brightnessVal.textContent = s.brightness;
+        els.setContrast.value = s.contrast; els.contrastVal.textContent = s.contrast;
+        els.setSaturation.value = s.saturation; els.saturationVal.textContent = s.saturation;
+        els.setAec.checked = !!s.aec; els.aecValueRow.hidden = !!s.aec;
+        els.setAecValue.value = s.aecValue; els.aecValueVal.textContent = s.aecValue;
+        els.setAgc.checked = !!s.agc; els.agcGainRow.hidden = !!s.agc;
+        els.setAgcGain.value = s.agcGain; els.agcGainVal.textContent = s.agcGain;
+      }).catch(()=>{});
+    }
+  });
+  [['setQuality','qualityVal'],['setBrightness','brightnessVal'],['setContrast','contrastVal'],
+   ['setSaturation','saturationVal'],['setAecValue','aecValueVal'],['setAgcGain','agcGainVal']].forEach(([inp,lbl])=>{
+    els[inp].addEventListener('input', ()=>els[lbl].textContent = els[inp].value);
+  });
+  els.setAec.addEventListener('change', ()=> els.aecValueRow.hidden = els.setAec.checked);
+  els.setAgc.addEventListener('change', ()=> els.agcGainRow.hidden = els.setAgc.checked);
+  els.applySettingsBtn.addEventListener('click', () => {
+    if (!camHost) return;
+    const body = {
+      framesize: parseInt(els.setFramesize.value,10),
+      quality: parseInt(els.setQuality.value,10),
+      brightness: parseInt(els.setBrightness.value,10),
+      contrast: parseInt(els.setContrast.value,10),
+      saturation: parseInt(els.setSaturation.value,10),
+      aec: els.setAec.checked ? 1 : 0,
+      aecValue: parseInt(els.setAecValue.value,10),
+      agc: els.setAgc.checked ? 1 : 0,
+      agcGain: parseInt(els.setAgcGain.value,10)
+    };
+    camFetch('/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)}).catch(()=>{});
+  });
+ 
+  // ============================================================
+  // SENSORS + VERDICT
+  // ============================================================
+  const svgNS = 'http://www.w3.org/2000/svg';
+  let needleEl = null;
+  function buildCompass(){
+    const svg = els.compass; svg.innerHTML=''; const cx=55,cy=55,r=46;
+    const ring=document.createElementNS(svgNS,'circle');
+    ring.setAttribute('cx',cx); ring.setAttribute('cy',cy); ring.setAttribute('r',r);
+    ring.setAttribute('fill','#050403'); ring.setAttribute('stroke',getCSS('--line'));
+    svg.appendChild(ring);
+    for (let a=0;a<360;a+=30){
+      const rad=(a-90)*Math.PI/180, isStart=a===0;
+      const rInner = isStart? r-11 : r-6;
+      const x1=cx+rInner*Math.cos(rad), y1=cy+rInner*Math.sin(rad);
+      const x2=cx+r*Math.cos(rad), y2=cy+r*Math.sin(rad);
+      const t=document.createElementNS(svgNS,'line');
+      t.setAttribute('x1',x1);t.setAttribute('y1',y1);t.setAttribute('x2',x2);t.setAttribute('y2',y2);
+      t.setAttribute('stroke', isStart?getCSS('--accent'):getCSS('--text-dim'));
+      t.setAttribute('stroke-width', isStart?'2':'1');
+      svg.appendChild(t);
+    }
+    const needle=document.createElementNS(svgNS,'g');
+    const line=document.createElementNS(svgNS,'line');
+    line.setAttribute('x1',cx);line.setAttribute('y1',cy);line.setAttribute('x2',cx);line.setAttribute('y2',cy-r+12);
+    line.setAttribute('stroke',getCSS('--accent')); line.setAttribute('stroke-width','2');
+    needle.appendChild(line);
+    const hub=document.createElementNS(svgNS,'circle');
+    hub.setAttribute('cx',cx);hub.setAttribute('cy',cy);hub.setAttribute('r','3');hub.setAttribute('fill',getCSS('--accent'));
+    needle.appendChild(hub);
+    svg.appendChild(needle);
+    needleEl = needle;
+  }
+  function updateCompass(yaw){ if(!needleEl) return; const mod=((yaw%360)+360)%360; needleEl.setAttribute('transform',`rotate(${mod} 55 55)`); }
+  function updateAttitude(pitch, roll){
+    const cp = Math.max(-45, Math.min(45, pitch));
+    els.horizon.style.transform = `rotate(${roll}deg) translateY(${cp*1.8}px)`;
+  }
+  function setGauge(el, level, colors){
+    const segs = el.children;
+    for (let i=0;i<segs.length;i++) segs[i].className = 'gauge-seg' + (i<=level ? ' '+colors[i] : '');
+  }
+  function renderOdometer(m){
+    const neg = m<0, abs = Math.min(Math.abs(m), 9999.9);
+    const digits = abs.toFixed(1).padStart(6,'0');
+    let html = '<div class="odo-digit sym">'+(neg?'-':'')+'</div>';
+    for (const ch of digits) html += ch==='.' ? '<div class="odo-digit sym">.</div>' : '<div class="odo-digit">'+ch+'</div>';
+    els.odometer.innerHTML = html;
+  }
+ 
+  // Environmental safety: is it safe to proceed given what the sensors see
+  // in the surroundings (gas, air, collision, flip). About the MINE, not
+  // the rover's own equipment - kept deliberately separate from system
+  // health below, same distinction the firmware itself keeps.
+  function computeEnvironmentVerdict(data){
+    const reasons = [];
+    let level = 0;
+    if (data.mq2_level >= 2){ level=2; reasons.push('Smoke detected'); }
+    else if (data.mq2_level === 1){ level=Math.max(level,1); reasons.push('Combustible gas present'); }
+    if (data.mq135_level >= 3){ level=2; reasons.push('Unsafe air quality'); }
+    else if (data.mq135_level >= 1){ level=Math.max(level,1); reasons.push('Air quality degraded'); }
+    if (data.collisionDetected){ level=2; reasons.push('Collision just detected'); }
+    if (data.flippedOver){ level=2; reasons.push('Rover appears upside down'); }
+    if (fireAlertActive){ level=2; reasons.push(fireAlertMsg); }
+ 
+    const cls = level===2?'unsafe':level===1?'caution':'safe';
+    const title = level===2?'Unsafe — do not proceed':level===1?'Caution advised':'Safe to proceed';
+    els.verdict.className = 'verdict ' + cls;
+    els.verdictTitle.textContent = title;
+    els.verdictReasons.textContent = reasons.join(' · ') || 'All monitored conditions normal.';
+  }
+ 
+  const FAULT_CODE_NAMES = {
+    101:'DHT11', 102:'MPU6050', 103:'MQ2', 104:'MQ135', 105:'Arduino UART link',
+    106:'Ultrasonic X', 107:'Ultrasonic Y', 108:'LoRa', 109:'Battery',
+    110:'ESP32', 111:'Motor control', 112:'Servo control'
+  };
+ 
+  // System health: is the ROVER'S OWN sensing/control equipment working
+  // correctly - straight from the firmware's own three-state evaluation of
+  // each component, not re-derived here. commandLinkLost is a separate
+  // signal from the transmitter (motors self-stopped, no recent command)
+  // folded in here since it's equally important status.
+  function computeSystemVerdict(health, commandLinkLost){
+    let cls = health.overall==='CRITICAL' ? 'unsafe' : health.overall==='WARNING' ? 'caution' : 'safe';
+    let title = health.overall==='CRITICAL' ? 'Critical fault' : health.overall==='WARNING' ? 'Warning' : 'All systems healthy';
+    if (commandLinkLost && cls === 'safe') { cls = 'caution'; title = 'Link lost — stopped'; }
+    els.sysVerdict.className = 'verdict ' + cls;
+    els.sysVerdictTitle.textContent = title;
+    let reason = health.faultCount + (health.faultCount===1?' component flagged':' components flagged');
+    if (health.activeFaultCode) reason += ' · ' + (FAULT_CODE_NAMES[health.activeFaultCode] || ('code '+health.activeFaultCode));
+    if (commandLinkLost) reason += (health.faultCount>0 ? ' · ' : '') + "rover hasn't received a command recently - motors held at 0";
+    els.sysVerdictReasons.textContent = (health.faultCount>0 || commandLinkLost) ? reason : 'Every monitored component healthy.';
+  }
+ 
+  const HEALTH_LABELS = {
+    esp32:'ESP32', dht11:'DHT11', mpu6050:'MPU6050', mq2:'MQ2', mq135:'MQ135',
+    arduinoUart:'Arduino link', ultrasonicX:'Ultrasonic X', ultrasonicY:'Ultrasonic Y',
+    servoControl:'Servo control', motorControl:'Motor control', lora:'LoRa'
+  };
+ 
+  function renderHealthTable(health){
+    let rows = '';
+    let offCount = 0, wrongCount = 0;
+    const offList = [], wrongList = [];
+    for (const key in HEALTH_LABELS){
+      const state = health[key] || 'OK';
+      const isOn = state !== 'FAULT';
+      const wrong = state === 'WARNING';
+      if (!isOn){ offCount++; offList.push(HEALTH_LABELS[key]); }
+      if (wrong){ wrongCount++; wrongList.push(HEALTH_LABELS[key]); }
+      const stateCell = isOn ? '<span class="state-on">On</span>' : '<span class="state-off">Off</span>';
+      const wrongCell = !isOn ? '<span class="wrong-na">—</span>' : (wrong ? '<span class="wrong-yes">Yes</span>' : '<span class="wrong-no">No</span>');
+      rows += `<tr><td>${HEALTH_LABELS[key]}</td><td>${stateCell}</td><td>${wrongCell}</td></tr>`;
+    }
+    els.healthTableBody.innerHTML = rows;
+ 
+    const el = els.healthConclusion;
+    if (offCount === 0 && wrongCount === 0){
+      el.className = 'health-conclusion';
+      el.textContent = 'Conclusion: every sensor is connected and reporting normally.';
+    } else {
+      const parts = [];
+      if (offCount) parts.push(`${offCount} offline (${offList.join(', ')})`);
+      if (wrongCount) parts.push(`${wrongCount} giving questionable readings (${wrongList.join(', ')})`);
+      el.textContent = 'Conclusion: ' + parts.join('; ') + '.';
+      el.className = 'health-conclusion ' + (offCount > 0 ? 'critical' : 'warn');
+    }
+  }
+ 
+  // ---- temperature trend + fire/blast alert (client-side, from DHT11 readings) ----
+  const TEMP_HISTORY_WINDOW_MS = 90000;
+  const RAPID_RISE_C_PER_MIN = 3;
+  const ABS_HIGH_TEMP_C = 50;
+  let tempHistory = [];
+  let fireAlertActive = false;
+  let fireAlertMsg = '';
+ 
+  function drawTempSparkline(){
+    const canvas = els.tempSparkline;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (tempHistory.length < 2) return;
+    const temps = tempHistory.map(p => p.temp);
+    const min = Math.min(...temps), max = Math.max(...temps);
+    const range = (max - min) || 1;
+    ctx.strokeStyle = getCSS('--accent');
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    tempHistory.forEach((p, i) => {
+      const x = (i / (tempHistory.length - 1)) * canvas.width;
+      const y = canvas.height - ((p.temp - min) / range) * canvas.height;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+ 
+  function updateTemperature(tempC){
+    const now = Date.now();
+    tempHistory.push({ t: now, temp: tempC });
+    tempHistory = tempHistory.filter(p => now - p.t <= TEMP_HISTORY_WINDOW_MS);
+    drawTempSparkline();
+ 
+    let alertMsg = null;
+    if (tempHistory.length >= 2) {
+      const oldest = tempHistory[0];
+      const minutesElapsed = (now - oldest.t) / 60000;
+      if (minutesElapsed > 0) {
+        const rate = (tempC - oldest.temp) / minutesElapsed;
+        if (rate >= RAPID_RISE_C_PER_MIN) alertMsg = `Rising fast (+${rate.toFixed(1)}°C/min) — possible fire or blast`;
+      }
+    }
+    if (!alertMsg && tempC >= ABS_HIGH_TEMP_C) alertMsg = `Abnormally high (${tempC}°C) — possible fire or blast`;
+ 
+    fireAlertActive = !!alertMsg;
+    fireAlertMsg = alertMsg || '';
+ 
+    if (alertMsg) {
+      els.tempAlertBanner.className = 'temp-alert-banner danger';
+      els.tempAlertBanner.textContent = alertMsg;
+    } else {
+      els.tempAlertBanner.className = 'temp-alert-banner ok';
+      els.tempAlertBanner.textContent = 'Temperature stable';
+    }
+  }
+ 
+  // ============================================================
+  // PATH & RETURN JOURNEY
+  // ============================================================
+  let livePath = [];
+  let referencePath = null;
+ 
+  function pathStorageKey(name){ return 'roverPath:' + name; }
+ 
+  function listSavedPaths(){
+    const names = [];
+    for (let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      if (k && k.indexOf('roverPath:') === 0) names.push(k.slice('roverPath:'.length));
+    }
+    return names;
+  }
+ 
+  function refreshSavedPathsDropdown(){
+    const sel = els.pathSavedSelect;
+    const current = sel.value;
+    sel.innerHTML = '<option value="">Saved paths…</option>' +
+      listSavedPaths().map(n => `<option value="${n}">${n}</option>`).join('');
+    sel.value = current;
+  }
+ 
+  function drawPathMap(){
+    const canvas = els.pathMap;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+ 
+    const allPoints = livePath.concat(referencePath || []);
+    if (allPoints.length === 0){
+      ctx.fillStyle = getCSS('--text-dim');
+      ctx.font = '12px "Space Grotesk", sans-serif';
+      ctx.fillText('No path data yet', 12, 20);
+      return;
+    }
+ 
+    let minX=0,maxX=0,minY=0,maxY=0;
+    allPoints.forEach(p => { minX=Math.min(minX,p.x); maxX=Math.max(maxX,p.x); minY=Math.min(minY,p.y); maxY=Math.max(maxY,p.y); });
+    const pad = 1;
+    minX-=pad; maxX+=pad; minY-=pad; maxY+=pad;
+    const spanX = Math.max(maxX-minX, 1), spanY = Math.max(maxY-minY, 1);
+    const scale = Math.min((canvas.width-20)/spanX, (canvas.height-20)/spanY);
+ 
+    function toPx(p){
+      return { x: 10 + (p.x - minX) * scale, y: canvas.height - 10 - (p.y - minY) * scale };
+    }
+    function drawPath(points, color, width){
+      if (points.length < 1) return;
+      ctx.strokeStyle = color; ctx.lineWidth = width;
+      ctx.beginPath();
+      points.forEach((p,i) => { const px=toPx(p); if(i===0) ctx.moveTo(px.x,px.y); else ctx.lineTo(px.x,px.y); });
+      ctx.stroke();
+    }
+ 
+    if (referencePath && referencePath.length) drawPath(referencePath, getCSS('--text-dim'), 2);
+    drawPath(livePath, getCSS('--accent'), 2);
+ 
+    const startPx = toPx({x:0,y:0});
+    ctx.fillStyle = getCSS('--ok');
+    ctx.beginPath(); ctx.arc(startPx.x, startPx.y, 4, 0, Math.PI*2); ctx.fill();
+ 
+    if (livePath.length){
+      const curPx = toPx(livePath[livePath.length-1]);
+      ctx.fillStyle = getCSS('--danger');
+      ctx.beginPath(); ctx.arc(curPx.x, curPx.y, 5, 0, Math.PI*2); ctx.fill();
+    }
+  }
+ 
+  function updatePathReadout(x, y){
+    const dist = Math.sqrt(x*x + y*y);
+    const bearingRad = Math.atan2(-y, -x);
+    const bearingDeg = ((bearingRad*180/Math.PI) + 360) % 360;
+    els.pathReadout.textContent = `Position: (${x.toFixed(1)}, ${y.toFixed(1)}) m · To start: ${dist.toFixed(1)} m, bearing ${bearingDeg.toFixed(0)}°`;
+  }
+ 
+  function onPositionUpdate(x, y){
+    livePath.push({x,y});
+    if (livePath.length > 2000) livePath.shift();
+    updatePathReadout(x,y);
+    drawPathMap();
+  }
+ 
+  els.pathSaveBtn.addEventListener('click', () => {
+    const name = prompt('Name this path (e.g. "Tunnel A - outbound"):');
+    if (!name) return;
+    localStorage.setItem(pathStorageKey(name), JSON.stringify(livePath));
+    refreshSavedPathsDropdown();
+    els.pathMsg.style.color = getCSS('--ok');
+    els.pathMsg.textContent = `Saved "${name}" (${livePath.length} points) to this browser.`;
+ 
+    const cloudUrl = localStorage.getItem('roverCloudDbUrl');
+    if (cloudUrl){
+      fetch(`${cloudUrl}/roverPaths/${encodeURIComponent(name)}.json`, {
+        method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(livePath)
+      }).then(()=>{ els.pathMsg.textContent += ' Also synced to cloud.'; })
+        .catch(()=>{ els.pathMsg.textContent += ' (Cloud sync failed - saved locally only.)'; });
+    }
+  });
+ 
+  els.pathClearBtn.addEventListener('click', () => {
+    livePath = [];
+    drawPathMap();
+    els.pathMsg.style.color = getCSS('--text-dim');
+    els.pathMsg.textContent = 'Live trail cleared.';
+  });
+ 
+  els.pathLoadBtn.addEventListener('click', () => {
+    const name = els.pathSavedSelect.value;
+    if (!name){ els.pathMsg.textContent = 'Pick a saved path first.'; return; }
+    const raw = localStorage.getItem(pathStorageKey(name));
+    if (!raw){ els.pathMsg.textContent = 'Could not find that saved path.'; return; }
+    referencePath = JSON.parse(raw);
+    drawPathMap();
+    els.pathMsg.style.color = getCSS('--text-dim');
+    els.pathMsg.textContent = `Showing "${name}" as a reference (grey) alongside the live path.`;
+  });
+ 
+  els.pathDeleteBtn.addEventListener('click', () => {
+    const name = els.pathSavedSelect.value;
+    if (!name) return;
+    if (!confirm(`Delete saved path "${name}"?`)) return;
+    localStorage.removeItem(pathStorageKey(name));
+    refreshSavedPathsDropdown();
+    els.pathMsg.textContent = `Deleted "${name}".`;
+  });
+ 
+  els.cloudSaveUrlBtn.addEventListener('click', () => {
+    const url = els.cloudDbUrl.value.trim().replace(/\/$/,'');
+    if (url) localStorage.setItem('roverCloudDbUrl', url);
+    else localStorage.removeItem('roverCloudDbUrl');
+    els.cloudMsg.textContent = url ? 'Cloud address saved - future path saves will also sync there.' : 'Cloud sync disabled.';
+  });
+ 
+  // ============================================================
+  // Telemetry polling
+  // ============================================================
+  function pollTelemetry(){
+    roverFetch('/telemetry').then(r=>r.json()).then(data => {
+      if (!data.haveData){ els.linkVal.textContent = 'waiting for rover'; return; }
+      const stale = data.msSinceLastPacket > 2000;
+      els.linkVal.textContent = stale ? 'signal lost' : 'live';
+      els.linkVal.style.color = stale ? getCSS('--danger') : getCSS('--ok');
+ 
+      els.gasText.textContent = data.mq2_alert; els.gasRaw.textContent = data.mq2_raw_adc+'/4095';
+      els.gasDot.className = 'alert-dot ' + (data.mq2_level===0?'ok':data.mq2_level===1?'warn':'danger');
+      setGauge(els.gasGauge, data.mq2_level, ['on-ok','on-warn','on-danger']);
+ 
+      els.airText.textContent = data.mq135_alert; els.airRaw.textContent = data.mq135_raw_adc+'/4095';
+      els.airDot.className = 'alert-dot ' + (data.mq135_level===0?'ok':data.mq135_level<=2?'warn':'danger');
+      setGauge(els.airGauge, data.mq135_level, ['on-ok','on-warn','on-warn','on-danger']);
+ 
+      els.tempVal.textContent = data.temperature_c + ' °C';
+      updateTemperature(data.temperature_c);
+      els.humidityVal.textContent = data.humidity_pct + ' % RH';
+      window.__lastTemp = data.temperature_c; window.__lastHumidity = data.humidity_pct;
+ 
+      updateAttitude(data.orientation_deg.pitch, data.orientation_deg.roll);
+      updateCompass(data.orientation_deg.yaw);
+      els.pitchRollNum.textContent = data.orientation_deg.pitch.toFixed(1)+'° / '+data.orientation_deg.roll.toFixed(1)+'°';
+      els.yawNum.textContent = (data.orientation_deg.yaw>=0?'+':'')+data.orientation_deg.yaw.toFixed(1)+'°';
+      els.surfaceVal.textContent = data.surface;
+      const dist = data.ultrasonicPan.distance_cm>0 ? data.ultrasonicPan.distance_cm.toFixed(0)+' cm' : 'out of range';
+      els.obstacleVal.textContent = data.obstacleDetected ? (data.ultrasonicPan.angle_deg.toFixed(0)+'° · '+dist+' · clearest: '+data.freeDirection) : 'clear';
+      els.collisionVal.textContent = data.collisionDetected ? 'Detected!' : 'None';
+      els.collisionVal.style.color = data.collisionDetected ? getCSS('--danger') : '';
+      els.flipVal.textContent = data.flippedOver ? 'YES' : 'No';
+      els.flipVal.style.color = data.flippedOver ? getCSS('--danger') : '';
+      renderOdometer(data.distanceTraveled_m);
+ 
+      if (data.position) onPositionUpdate(data.position.x, data.position.y);
+ 
+      els.cmdLinkVal.textContent = data.commandLinkLost ? 'Lost — motors stopped' : 'OK';
+      els.cmdLinkVal.style.color = data.commandLinkLost ? getCSS('--danger') : '';
+ 
+      renderHealthTable(data.health);
+      computeSystemVerdict(data.health, data.commandLinkLost);
+      computeEnvironmentVerdict(data);
+    }).catch(() => { els.linkVal.textContent = 'no signal'; els.linkVal.style.color = getCSS('--danger'); });
+  }
+ 
+  // ---- climate compare (Open-Meteo, no API key needed) ----
+  els.climateBtn.addEventListener('click', () => {
+    els.climateResult.hidden = false;
+    els.climateResult.textContent = 'Getting your location…';
+    if (!navigator.geolocation){ els.climateResult.textContent = "This browser can't share location — try entering it manually in a future version."; return; }
+    navigator.geolocation.getCurrentPosition(pos => {
+      const {latitude, longitude} = pos.coords;
+      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m`)
+        .then(r=>r.json()).then(w => {
+          const surfaceT = w.current.temperature_2m, surfaceH = w.current.relative_humidity_2m;
+          const mineT = window.__lastTemp, mineH = window.__lastHumidity;
+          if (mineT===undefined){ els.climateResult.textContent = 'Waiting on rover sensor data to compare against.'; return; }
+          const dT = (mineT-surfaceT).toFixed(1), dH = (mineH-surfaceH).toFixed(0);
+          els.climateResult.textContent = `Surface: ${surfaceT}°C, ${surfaceH}% RH. Mine is ${Math.abs(dT)}°C ${dT>=0?'warmer':'cooler'} and ${Math.abs(dH)}% ${dH>=0?'more humid':'drier'} than the surface right now.`;
+        }).catch(()=>{ els.climateResult.textContent = "Couldn't reach the weather service — this device needs its own internet access (not just the rover's WiFi) for this feature."; });
+    }, () => { els.climateResult.textContent = 'Location permission denied — enable it to compare against surface climate.'; });
+  });
+ 
+  // ============================================================
+  // init
+  // ============================================================
+  buildCompass();
+  renderOdometer(0);
+  drawPathMap();
+  refreshSavedPathsDropdown();
+  els.cloudDbUrl.value = localStorage.getItem('roverCloudDbUrl') || '';
+ 
+  // If this page is being served by the receiver itself (not opened as a
+  // bare local file), guess its own address as a starting point for the
+  // receiver field - still fully editable.
+  const originGuess = location.protocol.indexOf('http') === 0 ? location.origin : '';
+ 
+  els.camHost.value = q.get('cam') || '192.168.4.50';
+  els.roverHostInput.value = q.get('receiver') || originGuess;
+  if (q.get('cam') || q.get('receiver') || KEY) connect();
+})();
+</script>
+</body>
+</html>
+ 
